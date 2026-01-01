@@ -24,70 +24,82 @@ class ActivityPresentationDTO
     public static function fromActivity(Activity $activity, array $resolvedModels, array $config): self
     {
         $labelAttributes = $config['label_attribute'] ?? [];
-        $resolvers = $config['resolvers'] ?? [];
-        $hiddenAttributes = $config['hidden_attributes'] ?? [];
+        $translator = app(\Deifhelt\ActivityPresenter\Services\TranslationService::class);
 
-        // 1. Resolve User Name
-        $causer = $activity->causer;
-        $userName = 'System';
-        if ($causer) {
-            $userClass = get_class($causer);
-            $userLabelAttr = $labelAttributes[$userClass] ?? 'name'; // Default to name
-            $userName = $causer->{$userLabelAttr} ?? 'Unknown';
-        }
-
-        // 2. Resolve Subject Name
-        $subjectName = 'Unknown Entity';
-        if ($activity->subject) {
-            $subjectClass = get_class($activity->subject);
-            $subjectLabelAttr = $labelAttributes[$subjectClass] ?? 'title'; // Default assumption
-            if (isset($activity->subject->{$subjectLabelAttr})) {
-                $subjectName = $activity->subject->{$subjectLabelAttr};
-            } else {
-                $subjectName = class_basename($subjectClass) . " #{$activity->subject_id}";
-            }
-        } elseif ($activity->subject_type) {
-            // Subject deleted?
-            $subjectName = class_basename($activity->subject_type) . " #{$activity->subject_id}";
-        }
-
-        // 3. Process Properties (Values)
-        $properties = $activity->properties;
-        $old = $properties['old'] ?? [];
-        $attributes = $properties['attributes'] ?? [];
-
-        $processValues = function (array $values) use ($resolvers, $resolvedModels, $labelAttributes, $hiddenAttributes) {
-            $processed = [];
-            foreach ($values as $key => $value) {
-                if (in_array($key, $hiddenAttributes))
-                    continue;
-
-                if (isset($resolvers[$key])) {
-                    $modelClass = $resolvers[$key];
-                    // Look up in resolved cache
-                    if (isset($resolvedModels[$modelClass][$value])) {
-                        $model = $resolvedModels[$modelClass][$value];
-                        $labelAttr = $labelAttributes[$modelClass] ?? 'name';
-                        $processed[$key] = $model->{$labelAttr} ?? $value;
-                        continue;
-                    }
-                }
-                $processed[$key] = $value;
-            }
-            return $processed;
-        };
+        $userName = self::resolveUserName($activity, $labelAttributes);
+        $subjectName = self::resolveSubjectName($activity, $labelAttributes, $translator);
 
         return new self(
             id: $activity->id,
             date: $activity->created_at->format('Y-m-d H:i:s'),
             diff: $activity->created_at->diffForHumans(),
             user_name: $userName,
-            event: $activity->event, // Can be translated later or here if passed translator
-            subject_type: class_basename($activity->subject_type),
+            event: $translator->translateEvent($activity->event),
+            subject_type: $translator->translateModel($activity->subject_type ?? ''),
             subject_name: $subjectName,
-            old_values: $processValues($old),
-            new_values: $processValues($attributes),
-            raw_properties: $properties->toArray()
+            old_values: self::resolveValues($activity->properties['old'] ?? [], $config, $resolvedModels, $translator),
+            new_values: self::resolveValues($activity->properties['attributes'] ?? [], $config, $resolvedModels, $translator),
+            raw_properties: $activity->properties->toArray()
         );
+    }
+
+    private static function resolveUserName(Activity $activity, array $labelAttributes): string
+    {
+        $causer = $activity->causer;
+        if (!$causer) {
+            return 'System';
+        }
+
+        $userClass = get_class($causer);
+        $userLabelAttr = $labelAttributes[$userClass] ?? 'name';
+
+        return $causer->{$userLabelAttr} ?? 'Unknown';
+    }
+
+    private static function resolveSubjectName(Activity $activity, array $labelAttributes, $translator): string
+    {
+        if ($activity->subject) {
+            $subjectClass = get_class($activity->subject);
+            $subjectLabelAttr = $labelAttributes[$subjectClass] ?? 'title';
+
+            return $activity->subject->{$subjectLabelAttr}
+                ?? $translator->translateModel($subjectClass) . " #{$activity->subject_id}";
+        }
+
+        if ($activity->subject_type) {
+            return $translator->translateModel($activity->subject_type) . " #{$activity->subject_id}";
+        }
+
+        return 'Unknown Entity';
+    }
+
+    private static function resolveValues(array $values, array $config, array $resolvedModels, $translator): array
+    {
+        $processed = [];
+        $resolvers = $config['resolvers'] ?? [];
+        $hiddenAttributes = $config['hidden_attributes'] ?? [];
+        $labelAttributes = $config['label_attribute'] ?? [];
+
+        foreach ($values as $key => $value) {
+            if (in_array($key, $hiddenAttributes)) {
+                continue;
+            }
+
+            $translatedKey = $translator->translateAttribute($key);
+
+            if (isset($resolvers[$key])) {
+                $modelClass = $resolvers[$key];
+                if (isset($resolvedModels[$modelClass][$value])) {
+                    $model = $resolvedModels[$modelClass][$value];
+                    $labelAttr = $labelAttributes[$modelClass] ?? 'name';
+                    $processed[$translatedKey] = $model->{$labelAttr} ?? $value;
+                    continue;
+                }
+            }
+
+            $processed[$translatedKey] = $value;
+        }
+
+        return $processed;
     }
 }

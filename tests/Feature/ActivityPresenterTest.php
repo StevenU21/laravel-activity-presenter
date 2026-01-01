@@ -39,7 +39,7 @@ it('can resolve activity with related model', function () {
 
     $dto = ActivityPresenter::present($activity);
 
-    expect($dto->old_values['user_id'])->toBe('John Doe');
-    expect($dto->new_values['user_id'])->toBe('John Doe');
-    expect($dto->old_values['foo'])->toBe('bar');
+    expect($dto->old_values['User id'])->toBe('John Doe');
+    expect($dto->new_values['User id'])->toBe('John Doe');
+    expect($dto->old_values['Foo'])->toBe('bar');
 });

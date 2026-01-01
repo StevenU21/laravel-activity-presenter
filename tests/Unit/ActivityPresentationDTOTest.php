@@ -28,7 +28,7 @@ it('transforms activity into dto correctly', function () {
     expect($dto->id)->toBe(1);
     expect($dto->date)->toBe('2023-01-01 12:00:00');
     expect($dto->old_values)->not->toHaveKey('hidden');
-    expect($dto->new_values)->toHaveKey('name', 'New Name');
+    expect($dto->new_values)->toHaveKey('Name', 'New Name');
 });
 
 it('uses resolved models for values', function () {
@@ -57,5 +57,5 @@ it('uses resolved models for values', function () {
 
     $dto = ActivityPresentationDTO::fromActivity($activity, $resolvedModels, $config);
 
-    expect($dto->new_values['user_id'])->toBe('Deifhelt');
+    expect($dto->new_values['User id'])->toBe('Deifhelt');
 });

@@ -9,6 +9,7 @@ A configuration-driven package to present Spatie Activity Log activities with re
 -   [Installation & Configuration](docs/installation.md)
 -   [Logging Model Events](docs/logging.md)
 -   [Presenting Activity (Usage)](docs/usage.md)
+-   [Localization (Multi-Language)](docs/localization.md)
 
 ## Quick Start
 
