@@ -9,6 +9,11 @@ use Spatie\Activitylog\ActivitylogServiceProvider;
 
 class TestCase extends Orchestra
 {
+    /**
+     * @var \Illuminate\Testing\TestResponse|null
+     */
+    protected static $latestResponse = null;
+
     protected function setUp(): void
     {
         parent::setUp();
