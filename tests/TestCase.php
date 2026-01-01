@@ -1,10 +1,11 @@
 <?php
 
-namespace VendorName\Skeleton\Tests;
+namespace Deifhelt\ActivityPresenter\Tests;
 
+use Deifhelt\ActivityPresenter\ActivityPresenterServiceProvider;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
-use VendorName\Skeleton\SkeletonServiceProvider;
+use Spatie\Activitylog\ActivitylogServiceProvider;
 
 class TestCase extends Orchestra
 {
@@ -13,14 +14,15 @@ class TestCase extends Orchestra
         parent::setUp();
 
         Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'VendorName\\Skeleton\\Database\\Factories\\'.class_basename($modelName).'Factory'
+            fn(string $modelName) => 'Deifhelt\\ActivityPresenter\\Database\\Factories\\' . class_basename($modelName) . 'Factory'
         );
     }
 
     protected function getPackageProviders($app)
     {
         return [
-            SkeletonServiceProvider::class,
+            ActivitylogServiceProvider::class,
+            ActivityPresenterServiceProvider::class,
         ];
     }
 
@@ -28,10 +30,22 @@ class TestCase extends Orchestra
     {
         config()->set('database.default', 'testing');
 
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/../database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
+        // Setup activity log migration
+        $migrationFile = __DIR__ . '/../vendor/spatie/laravel-activitylog/database/migrations/create_activity_log_table.php.stub';
+
+        if (file_exists($migrationFile)) {
+            if (!class_exists('CreateActivityLogTable')) {
+                include $migrationFile;
+            }
+            (new \CreateActivityLogTable)->up();
+
+            // Fix for potential missing event column in older migrations or specific environments
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('activity_log', 'event')) {
+                \Illuminate\Support\Facades\Schema::table('activity_log', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->string('event')->nullable();
+                });
+            }
+        }
+
     }
 }
