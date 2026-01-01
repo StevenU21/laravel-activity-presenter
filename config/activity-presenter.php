@@ -12,8 +12,7 @@ return [
     |
     */
     'resolvers' => [
-        'user_id' => \App\Models\User::class,
-        // 'brand_id' => \App\Models\Brand::class,
+        // 'user_id' => \App\Models\User::class,
     ],
 
     /*
@@ -26,8 +25,7 @@ return [
     |
     */
     'label_attribute' => [
-        \App\Models\User::class => 'name',
-        // \App\Models\Brand::class => 'title',
+        // \App\Models\User::class => 'name',
     ],
 
     /*
