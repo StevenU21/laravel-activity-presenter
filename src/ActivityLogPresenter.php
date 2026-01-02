@@ -90,7 +90,16 @@ class ActivityLogPresenter
             return $paginator;
         }
 
-        $activityQuery = Activity::whereIn('id', $activityIds);
+        $activities = $this->fetchGroupedActivities($activityIds, $loadRelations, $afterFetch);
+
+        $this->hydrateGroupedPaginator($paginator, $activities, $latestIdColumn);
+
+        return $paginator;
+    }
+
+    protected function fetchGroupedActivities(array $ids, ?callable $loadRelations, ?callable $afterFetch): Collection
+    {
+        $activityQuery = Activity::whereIn('id', $ids);
 
         if ($loadRelations) {
             $loadRelations($activityQuery);
@@ -104,8 +113,13 @@ class ActivityLogPresenter
             $afterFetch($activities);
         }
 
-        $activities = $activities->keyBy('id');
+        return $activities->keyBy('id');
+    }
+
+    protected function hydrateGroupedPaginator($paginator, Collection $activities, string $latestIdColumn): void
+    {
         $resolvedModels = $this->resolver->resolve($activities);
+
         $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels, $latestIdColumn) {
             $id = $groupRow->{$latestIdColumn} ?? $groupRow->id;
 
@@ -121,7 +135,5 @@ class ActivityLogPresenter
 
             return $groupRow;
         });
-
-        return $paginator;
     }
 }
