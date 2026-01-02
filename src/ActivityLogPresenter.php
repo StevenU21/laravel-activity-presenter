@@ -80,7 +80,8 @@ class ActivityLogPresenter
         int $perPage = 10,
         string $latestIdColumn = 'latest_id',
         ?callable $loadRelations = null,
-        ?callable $afterFetch = null
+        ?callable $afterFetch = null,
+        ?callable $mapGroupRow = null
     ) {
         $paginator = $query->paginate($perPage)->withQueryString();
 
@@ -92,7 +93,7 @@ class ActivityLogPresenter
 
         $activities = $this->fetchGroupedActivities($activityIds, $loadRelations, $afterFetch);
 
-        $this->hydrateGroupedPaginator($paginator, $activities, $latestIdColumn);
+        $this->hydrateGroupedPaginator($paginator, $activities, $latestIdColumn, $mapGroupRow);
 
         return $paginator;
     }
@@ -116,11 +117,15 @@ class ActivityLogPresenter
         return $activities->keyBy('id');
     }
 
-    protected function hydrateGroupedPaginator($paginator, Collection $activities, string $latestIdColumn): void
-    {
+    protected function hydrateGroupedPaginator(
+        $paginator,
+        Collection $activities,
+        string $latestIdColumn,
+        ?callable $mapGroupRow = null
+    ): void {
         $resolvedModels = $this->resolver->resolve($activities);
 
-        $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels, $latestIdColumn) {
+        $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels, $latestIdColumn, $mapGroupRow) {
             $id = $groupRow->{$latestIdColumn} ?? $groupRow->id;
 
             if (!isset($activities[$id])) {
@@ -132,6 +137,10 @@ class ActivityLogPresenter
 
             $groupRow->presentation = $presentation;
             $groupRow->encoded_subject_type = $this->encodeSubjectType($activity->subject_type ?? '');
+
+            if ($mapGroupRow) {
+                return $mapGroupRow($groupRow, $activity, $presentation);
+            }
 
             return $groupRow;
         });

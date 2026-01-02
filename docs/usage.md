@@ -66,7 +66,6 @@ public function index()
     $groupedRows = ActivityPresenter::presentGrouped(
         query: $query,
         perPage: 15,
-        latestIdColumn: 'latest_id',
         loadRelations: function ($query) {
              // 1. Eager load specific relations
              $query->with(['subject.client']);
@@ -74,6 +73,19 @@ public function index()
         afterFetch: function ($activities) {
              // 2. Perform logic on the Collection (e.g. loadMorph)
              // $activities->loadMorph('subject', [ ... ]);
+        },
+        mapGroupRow: function ($row, $activity, $presentation) {
+            // 3. Transform into a simple array or DTO for the view (ViewModel pattern)
+            return (object) [
+                'date' => $presentation->date,
+                'diff' => $presentation->diff,
+                'subject' => $presentation->subject_name,
+                'event' => $presentation->event,
+                'user' => $presentation->user_name,
+                // Add your own app-specific routes here to keep the view clean
+                'url' => route('audit.index', ['type' => $row->encoded_subject_type]),
+                'details_url' => route('audit.show', $activity->id),
+            ];
         }
     );
 
@@ -83,15 +95,16 @@ public function index()
 }
 ```
 
-In your view:
+In your view, you now have a clean object:
 
 ```blade
 @foreach($rows as $row)
-    <!-- Access the DTO via the presentation property -->
-    <div>{{ $row->presentation->subject_name }}</div>
-
-    <!-- Use the hydrated encoded_subject_type for links -->
-    <a href="{{ route('audit.index', ['type' => $row->encoded_subject_type]) }}">Filter by this type</a>
+    <tr>
+        <td>{{ $row->subject }}</td>
+        <td>{{ $row->event }}</td>
+        <td><a href="{{ $row->url }}">Filter</a></td>
+        <td><a href="{{ $row->details_url }}">View Details</a></td>
+    </tr>
 @endforeach
 ```
 

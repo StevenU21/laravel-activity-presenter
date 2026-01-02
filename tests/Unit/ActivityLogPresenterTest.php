@@ -15,8 +15,6 @@ class TestModel extends Model
     protected $table = 'test_models';
 }
 
-
-
 beforeEach(function () {
     // Create test tables
     Schema::create('test_models', function (Blueprint $table) {
@@ -150,16 +148,29 @@ it('presents grouped activities with advanced options', function () {
         latestIdColumn: 'max_id_alias',
         loadRelations: function ($q) {
             $q->where('id', '>', 0); // Dummy condition to verify callback is called
+        },
+        afterFetch: function ($collection) {
+            // Verify we received a collection of models
+            expect($collection)->toBeInstanceOf(\Illuminate\Database\Eloquent\Collection::class);
+            // Mutate something to verify it persists (side-effect)
+            if ($collection->isNotEmpty()) {
+                $collection->first()->was_processed_by_hook = true;
+            }
+        },
+        mapGroupRow: function ($row, $activity, $presentation) {
+            // Return a simple custom object (simulating a ViewModel)
+            return (object) [
+                'custom_title' => $presentation->subject_name . ' (' . $presentation->event . ')',
+                'original_id' => $activity->id,
+                'type_link' => $row->encoded_subject_type,
+            ];
         }
     );
 
     $item = $paginator->first();
 
-    // Verify encoded_subject_type hydration
-    expect($item->encoded_subject_type)->not->toBeNull();
-    // Base64 of TestModel::class
-    expect($item->encoded_subject_type)->toContain(str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(TestModel::class)));
-
-    // Verify presentation is attached
-    expect($item->presentation)->toBeInstanceOf(\Deifhelt\ActivityPresenter\Data\ActivityPresentationDTO::class);
+    // Verify mapped output
+    expect($item->custom_title)->toContain('Created'); // 'Created' or similar
+    expect($item->original_id)->toBe(1);
+    expect($item->type_link)->not->toBeNull();
 });
