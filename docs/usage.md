@@ -68,8 +68,12 @@ public function index()
         perPage: 15,
         latestIdColumn: 'latest_id',
         loadRelations: function ($query) {
-             // Advanced: Custom eager loading for specific domain logic (e.g. morph map)
+             // 1. Eager load specific relations
              $query->with(['subject.client']);
+        },
+        afterFetch: function ($activities) {
+             // 2. Perform logic on the Collection (e.g. loadMorph)
+             // $activities->loadMorph('subject', [ ... ]);
         }
     );
 

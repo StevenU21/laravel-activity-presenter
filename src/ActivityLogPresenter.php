@@ -45,21 +45,9 @@ class ActivityLogPresenter
     {
         $aliases = $this->config['subject_aliases'] ?? [];
 
-        // Check for alias (Value -> Key)
-        // Check if $modelClass is a key in aliases
         if (isset($aliases[$modelClass])) {
             return $aliases[$modelClass];
         }
-
-        // Search if $modelClass is a value in aliases (if user mapped 'alias' => Class)
-        // Standard convention is usually Class => Alias or Alias => Class. 
-        // Let's assume Key=Class, Value=Alias based on standard laravel morph map 
-        // BUT user said: 'subject_aliases' => [Sale::class => 'sale']
-        if (isset($aliases[$modelClass])) {
-            return $aliases[$modelClass];
-        }
-
-        // Fallback: URL safe Base64
         return str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($modelClass));
     }
 
@@ -70,13 +58,11 @@ class ActivityLogPresenter
     {
         $aliases = $this->config['subject_aliases'] ?? [];
 
-        // Check if param is an alias (search for value)
         $class = array_search($param, $aliases);
         if ($class !== false) {
             return $class;
         }
 
-        // Fallback: Base64 decode
         $base64 = str_replace(['-', '_'], ['+', '/'], $param);
         return base64_decode($base64);
     }
@@ -93,49 +79,43 @@ class ActivityLogPresenter
         Builder|QueryBuilder $query,
         int $perPage = 10,
         string $latestIdColumn = 'latest_id',
-        ?callable $loadRelations = null
+        ?callable $loadRelations = null,
+        ?callable $afterFetch = null
     ) {
-        // 1. Paginate the grouped results (lightweight, just subject_id/type/max_id)
-        $paginator = $query->paginate($perPage);
+        $paginator = $query->paginate($perPage)->withQueryString();
 
-        // 2. Extract the actual Activity IDs from the "latest" aggregate
         $activityIds = $paginator->getCollection()->map(fn($item) => $item->{$latestIdColumn} ?? $item->id)->filter()->toArray();
 
         if (empty($activityIds)) {
-            return $paginator; // Return empty paginator
+            return $paginator;
         }
 
-        // 3. Fetch full Activity models
         $activityQuery = Activity::whereIn('id', $activityIds);
 
         if ($loadRelations) {
             $loadRelations($activityQuery);
         } else {
-            $activityQuery->with(['causer', 'subject']); // Default eager load
+            $activityQuery->with(['causer', 'subject']);
         }
 
         $activities = $activityQuery->get()->keyBy('id');
 
-        // 4. Resolve Presentation (Relation Resolver)
-        $resolvedModels = $this->resolver->resolve($activities);
+        if ($afterFetch) {
+            $afterFetch($activities);
+        }
 
-        // 5. Transform the Paginator Collection
+        $resolvedModels = $this->resolver->resolve($activities);
         $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels, $latestIdColumn) {
             $id = $groupRow->{$latestIdColumn} ?? $groupRow->id;
 
             if (!isset($activities[$id])) {
-                return $groupRow; // Should not happen
+                return $groupRow;
             }
 
             $activity = $activities[$id];
-
-            // Present the activity
             $presentation = ActivityPresentationDTO::fromActivity($activity, $resolvedModels, $this->config);
 
-            // Hydrate/Attach presentation to the row
             $groupRow->presentation = $presentation;
-
-            // Hydrate encoded subject type for UI links
             $groupRow->encoded_subject_type = $this->encodeSubjectType($activity->subject_type ?? '');
 
             return $groupRow;
