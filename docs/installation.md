@@ -2,8 +2,8 @@
 
 ## Requirements
 
--   PHP 8.2+
--   Laravel 11.0+
+-   **PHP**: 8.1 or higher
+-   **Laravel**: 10.0, 11.0, or 12.0
 
 ## Installation
 
@@ -13,51 +13,72 @@ Install the package via composer:
 composer require deifhelt/laravel-activity-presenter
 ```
 
-> [!NOTE] > **Wrapper Notification**: This package automatically installs `spatie/laravel-activitylog` as a dependency. You do not need to install it separately. Refer to the [official Spatie documentation](https://spatie.be/docs/laravel-activitylog/v4/introduction) for deep dives.
+> [!NOTE] > **Dependencies**: This package automatically installs `spatie/laravel-activitylog` v4. If you are already using it, no changes are needed.
 
-## Setup
+## Configuration Setup
 
-### 1. Database & Migrations
+### 1. Publish Package Configuration
 
-Publish the migration file from the underlying Spatie package:
-
-```bash
-php artisan vendor:publish --provider="Spatie\Activitylog\ActivitylogServiceProvider" --tag="activitylog-migrations"
-```
-
-Run the migration to create the `activity_log` table:
-
-```bash
-php artisan migrate
-```
-
-### 2. Custom Database Connection (Optional)
-
-If you want your activities to be stored in a special database connection (e.g., for audit separation), define `ACTIVITY_LOGGER_DB_CONNECTION` in your `.env` file:
-
-```env
-ACTIVITY_LOGGER_DB_CONNECTION=audit_db
-```
-
-### 3. Publishing Configuration
-
-**Activity Presenter Config (Recommended)**
-This config controls how activities are resolved and presented by this package.
+Run the following command to publish the `config/activity-presenter.php` file:
 
 ```bash
 php artisan vendor:publish --tag="activity-presenter-config"
 ```
 
-**Activity Log Config (Optional)**
-If you need to tweak the low-level logging behavior (table name, retention, etc.).
+### 2. Configure Resolvers
 
-```bash
-php artisan vendor:publish --provider="Spatie\Activitylog\ActivitylogServiceProvider" --tag="activitylog-config"
+The configuration file is the heart of this package. It tells the presenter how to turn raw IDs into readable names.
+
+Open `config/activity-presenter.php`:
+
+#### resolvers
+
+Map attribute names (from the log properties) to their Eloquent implementation. This allows the system to look up the related model.
+
+```php
+'resolvers' => [
+    'user_id' => \App\Models\User::class,
+    'client_id' => \App\Models\Client::class,
+    'product_id' => \App\Models\Product::class,
+],
 ```
 
-> [!IMPORTANT]
-> After configuring everything, remember to clear the application config cache:
->
-> ```bash
-> php artisan config:clear
-> ```
+#### label_attribute
+
+Define which column to display for each model. If not specified, it defaults to `name` or `title`.
+
+```php
+'label_attribute' => [
+    \App\Models\User::class => 'full_name', // Uses $user->full_name
+    \App\Models\Client::class => 'company_name',
+],
+```
+
+#### hidden_attributes
+
+List attributes that should never be shown in the presented output (e.g., sensitive data or internal logic fields).
+
+```php
+'hidden_attributes' => [
+    'password',
+    'remember_token',
+    'api_key',
+    'updated_at', // Often noisy and unnecessary to show as a "change"
+],
+```
+
+### 3. Database Setup
+
+If you haven't set up the Activity Log table yet:
+
+```bash
+php artisan vendor:publish --provider="Spatie\Activitylog\ActivitylogServiceProvider" --tag="activitylog-migrations"
+php artisan migrate
+```
+
+## Next Steps
+
+Now that you have configured the package, check out:
+
+-   [Logging Guide](logging.md) to start recording activities.
+-   [Usage Guide](usage.md) to learn how to display them.

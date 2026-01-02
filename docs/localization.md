@@ -1,54 +1,84 @@
 # Localization (Multi-Language Support)
 
-This package uses Laravel's native localization system to translate activity events, model names, and attributes. This allows your application to support multiple languages (e.g., English, Spanish) seamlessly.
+Laravel Activity Presenter comes with built-in localization support. This ensures that your activity logs—which are technically stored as "keys" (e.g., `created`, `updated`)—are displayed to the user in their native language (e.g., "Creado", "Actualizado").
 
-## How it works
+## How Resolution Works
 
-The package enables the `activity-presenter` translation namespace. It looks for translations in the following order:
+The presenter checks for translations in the following namespace: `activity-presenter::logs`.
 
-1.  **Events**: `activity-presenter::logs.events.{event_name}` (e.g., `created`, `updated`)
-2.  **Models**: `activity-presenter::logs.models.{ModelName}` (e.g., `User`, `Post`)
-3.  **Attributes**: `activity-presenter::logs.attributes.{attribute_name}` (e.g., `is_active`, `amount`)
+It attempts to translate keys in this specific order:
 
-If no translation is found, it falls back to a readable default (e.g., "Created", "User", "Is Active").
+| Type          | Key Pattern              | Example Key            | Fallback                      |
+| :------------ | :----------------------- | :--------------------- | :---------------------------- |
+| **Event**     | `events.{event_name}`    | `events.created`       | `ucfirst($event)` ("Created") |
+| **Model**     | `models.{ClassBasename}` | `models.User`          | Class Basename ("User")       |
+| **Attribute** | `attributes.{column}`    | `attributes.is_active` | Readable title ("Is Active")  |
 
-## Customizing Translations
+## Publishing Translations
 
-To customize the texts, you can publish the language files:
+To customize the text or add a new language, publish the translation files:
 
 ```bash
 php artisan vendor:publish --tag="activity-presenter-translations"
 ```
 
-This will publish the files to `resources/lang/vendor/activity-presenter`. You can then edit them or add new languages.
+This creates the directory `resources/lang/vendor/activity-presenter`.
 
-### Example: Adding Spanish
+## Customization Guide
 
-If you publish the files, you will see `es/logs.php`:
+### 1. Events
+
+Defined in `logs.php`. Most common events are pre-filled, but you can add custom ones triggered by your application.
 
 ```php
-// resources/lang/vendor/activity-presenter/es/logs.php
-return [
-    'events' => [
-        'created' => 'Creado',
-        'updated' => 'Actualizado',
-        'deleted' => 'Eliminado',
-    ],
-    'models' => [
-        'User' => 'Usuario',
-        'Order' => 'Pedido',
-    ],
-    'attributes' => [
-        'amount' => 'Monto Total',
-    ]
-];
+// resources/lang/vendor/activity-presenter/en/logs.php
+
+'events' => [
+    'created' => 'Created',
+    'updated' => 'Updated',
+    'deleted' => 'Deleted',
+    'restored' => 'Restored',
+
+    // Custom events
+    'published' => 'Published',
+    'archived' => 'Archived',
+],
 ```
 
-## Changing Language
+### 2. Models (Subjects)
 
-Since we use Laravel's standard localization, changing the app locale automatically updates the logs:
+Map your Eloquent model class names to human-readable names.
 
 ```php
+'models' => [
+    'User' => 'System User',
+    'BlogPost' => 'Article',
+    'ProductVariant' => 'Product Option',
+],
+```
+
+### 3. Attributes
+
+Map database column names to user-friendly labels.
+
+```php
+'attributes' => [
+    'user_id' => 'Owner',
+    'category_id' => 'Category',
+    'is_visible' => 'Visibility Status',
+    'price_cents' => 'Price',
+],
+```
+
+## Runtime Language Switching
+
+The package relies on `Illuminate\Support\Facades\Lang`. This means it automatically respects the active locale of your application.
+
+```php
+// In a Middleware or Controller
 app()->setLocale('es');
-// $presenter->event will now be "Creado"
+
+// Presenter will now output Spanish
+$dto = ActivityPresenter::present($activity);
+echo $dto->event; // "Creado"
 ```

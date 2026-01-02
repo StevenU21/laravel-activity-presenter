@@ -1,41 +1,66 @@
 # Logging Model Events
 
-The package can automatically log events such as when a model is created, updated and deleted. To make this work all you need to do is let your model use the `Spatie\Activitylog\Traits\LogsActivity` trait.
+This package relies on `spatie/laravel-activitylog` to record events. This guide provides a quick reference on how to set up your models to ensure they generate logs that are easy to present.
 
-As a bonus the package will also log the changed attributes for all these events when you define our own options method.
+## Basic Setup
 
-The trait contains an abstract method `getActivitylogOptions()` that you can use to customize options. It needs to return a `LogOptions` instance built from `LogOptions::defaults()` using fluent methods.
-
-The attributes that need to be logged can be defined either by their name or you can put in a wildcard `['*']` to log any attribute that has changed.
-
-Here's an example:
+Add the `LogsActivity` trait to any Eloquent model you want to track.
 
 ```php
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
-class NewsItem extends Model
+class Product extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['name', 'text'];
-
+    // Required by Spatie: Configure what to log
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-        ->logOnly(['name', 'text']);
-        // Chain fluent methods for configuration options
+            ->logAll() // Log all attributes in $fillable
+            ->logOnlyDirty(); // Only log fields that actually changed
     }
 }
 ```
 
-Note that we start from sensible defaults, but any of them can be overridden as needed by chaining fluent methods. Review the `Spatie\Activitylog\LogOptions` class for full list of supported options.
+## Naming Your Logs
 
-## Basics of Logging Configuration
+By default, the log name is `default`. It's often useful to organize logs by channel (e.g., `system`, `orders`, `auth`).
 
-If you want to log changes to all the `$fillable` attributes of the model, you can chain `->logFillable()` on the `LogOptions` class.
+```php
+public function getActivitylogOptions(): LogOptions
+{
+    return LogOptions::defaults()
+        ->useLogName('inventory')
+        ->logFillable();
+}
+```
 
-Alternatively, if you have a lot of attributes and used `$guarded` instead of `$fillable` you can also chain `->logUnguarded()` to add all attributes that are not listed in `$guarded`.
+## Logging Related Models
 
-For both of these flags it will respect the possible wildcard `*` and add all `->logFillable()` or `->logUnguarded()` methods.
+For complex actions, you might want to log custom properties that `ActivityPresenter` can later resolve.
+
+### Example: Custom Event
+
+```php
+activity()
+    ->performedOn($order)
+    ->causedBy($user)
+    ->withProperties([
+        'custom_prop' => 'value',
+        'category_id' => $category->id // Presenter can resolve this!
+    ])
+    ->log('custom_action');
+```
+
+If you configured `category_id` in `config/activity-presenter.php`, the presenter will automatically look up the Category model when displaying this log, even though it's inside a JSON property.
+
+## Best Practices for Presentation
+
+1.  **Use `logOnlyDirty()`**: Prevents cluttering the database with updates where nothing changed.
+2.  **Log IDs for Relations**: Always log `user_id`, `team_id`, etc., in the properties if they aren't the main subject. The Presenter handles resolving them to names.
+3.  **Group Actions**: Use `batch` logging if available/needed for atomic operations.
+
+Refer to the [Spatie Documentation](https://spatie.be/docs/laravel-activitylog/v4/basic-usage/logging-activity) for the full API.

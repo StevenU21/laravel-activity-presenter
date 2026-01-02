@@ -4,17 +4,26 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/deifhelt/laravel-activity-presenter.svg?style=flat-square)](https://packagist.org/packages/deifhelt/laravel-activity-presenter)
 [![License](https://img.shields.io/packagist/l/deifhelt/laravel-activity-presenter.svg?style=flat-square)](https://packagist.org/packages/deifhelt/laravel-activity-presenter)
 
-A powerful wrapper around `spatie/laravel-activitylog` that transforms raw activity logs into human-readable, resolved presentations with optimized relationship loading.
+**Laravel Activity Presenter** is a powerful presentation layer for `spatie/laravel-activitylog`. It solves the common challenges of displaying activity logs in your application: resolving relationships efficiently, formatting data consistently, and handling translations.
 
-## Features
+## Why use this?
 
--   **Config-Driven**: Extensive configuration in `config/activity-presenter.php`
--   **Smart Resolution**: Automatically resolves related models (User, Subject) to prevent N+1 queries
--   **Rich Presentations**: Transforms raw log data into consistent, formatted DTOs
--   **Localization**: Built-in support for translating events, models, and attributes
--   **Custom Resolvers**: Define how specific attributes link to other models
+When displaying activity logs, you often face these issues:
 
-> **Note**: This package wraps `spatie/laravel-activitylog`. For advanced recording features like logging model events, batch logging, or custom properties, see the [official Spatie documentation](https://spatie.be/docs/laravel-activitylog/v4/introduction).
+1.  **N+1 Queries**: Showing "User X updated Project Y" requires loading the User and Project models for every log entry.
+2.  **Missing Context**: If "Project Y" is deleted, you still want to show its name in the log history, but the relationship is null.
+3.  **Unformatted Data**: You have `user_id: 5` in the log properties, but you want to display "John Doe".
+4.  **Inconsistent Presentation**: You find yourself repeating `trans('...')...` logic in every Blade view.
+
+**This package solves all of them.**
+
+## Key Features
+
+-   **🚀 Smart Resolution**: Automatically resolves related models (User, Subject) in a single optimized query to prevent N+1 issues.
+-   **💎 Unified DTO**: Transforms raw log data into a consistent `ActivityPresentationDTO` class for easy use in Views and APIs.
+-   **🔌 Config-Driven**: Define how specific attributes (like `category_id`) map to models in a simple config file.
+-   **🌍 Auto-Localization**: Built-in support for translating events (`created` -> `Creado`), model names (`User` -> `Usuario`), and attributes.
+-   **🛡️ Graceful Fallbacks**: If a related model is permanently deleted, it gracefully falls back to historical data (e.g., "Project #123").
 
 ## Installation
 
@@ -24,152 +33,69 @@ Install via Composer (Spatie Activitylog is included automatically):
 composer require deifhelt/laravel-activity-presenter
 ```
 
-Publish this package configuration:
+Publish the configuration:
 
 ```bash
 php artisan vendor:publish --provider="Deifhelt\ActivityPresenter\ActivityPresenterServiceProvider"
 ```
 
-This creates `config/activity-presenter.php` where you can define how models and attributes should be resolved.
+## Quick Usage
 
-Publish Spatie Activitylog configuration and migrations if you haven't already:
-
-```bash
-php artisan vendor:publish --provider="Spatie\Activitylog\ActivitylogServiceProvider" --tag="activitylog-migrations"
-```
-
-Run migrations:
-
-```bash
-php artisan migrate
-```
-
-## Configuration
-
-### Resolvers
-
-Map attribute keys to their corresponding Eloquent models. This allows the presenter to automatically load the related model when displaying the log.
-
-```php
-// config/activity-presenter.php
-
-'resolvers' => [
-    'user_id' => \App\Models\User::class,
-    'product_id' => \App\Models\Product::class,
-    'category_id' => \App\Models\Category::class,
-],
-```
-
-### Label Attributes
-
-Define which attribute of a resolved model should be used as its label (e.g., 'name', 'title', 'email').
-
-```php
-// config/activity-presenter.php
-
-'label_attribute' => [
-    \App\Models\User::class => 'name',
-    \App\Models\Product::class => 'title',
-    \App\Models\Category::class => 'slug',
-],
-```
-
-### Hidden Attributes
-
-Specify attributes that should strictly be excluded from the presentation output.
-
-```php
-'hidden_attributes' => [
-    'password',
-    'remember_token',
-    'two_factor_secret',
-],
-```
-
-## Usage
-
-Use the Facade to present activity logs. The presenter handles the heavy lifting of loading relationships and formatting data.
-
-### Presenting a Collection
-
-Efficiently processes a collection of activities, preloading all necessary relationships in a single pass to avoid N+1 issues.
+### 1. In your Controller
 
 ```php
 use Deifhelt\ActivityPresenter\Facades\ActivityPresenter;
 use Spatie\Activitylog\Models\Activity;
 
-$activities = Activity::latest()->get();
+public function index()
+{
+    // Fetch logs (paginated)
+    $activities = Activity::latest()->paginate(20);
 
-// Returns a Collection of ActivityPresentationDTOs
-$presentedArgs = ActivityPresenter::presentCollection($activities);
+    // Present them (loads relations, formats dates, translates events)
+    $presented = ActivityPresenter::presentCollection($activities);
 
-foreach ($presentedArgs as $dto) {
-    echo $dto->user_name;       // "John Doe" (Automatically resolved)
-    echo $dto->event;          // "Created" (Translated)
-    echo $dto->subject_name;   // "Project Alpha" (Resolved from subject relation)
-    echo $dto->diff;           // "2 hours ago"
+    return view('activities.index', [
+        'activities' => $presented
+    ]);
 }
 ```
 
-### Presenting a Single Activity
+### 2. In your Blade View
 
-```php
-$activity = Activity::find(1);
-$dto = ActivityPresenter::present($activity);
+```blade
+@foreach($activities as $activity)
+    <div class="activity-item">
+        <span class="date">{{ $activity->diff }}</span>
+
+        <!-- "John Doe created Project Alpha" -->
+        <p>
+            <strong>{{ $activity->user_name }}</strong>
+            {{ $activity->event }}
+            <strong>{{ $activity->subject_name }}</strong>
+        </p>
+
+        <!-- Show changes: "Status: Pending -> Active" -->
+        <ul>
+            @foreach($activity->new_values as $key => $value)
+                <li>
+                     {{ $key }}:
+                     <span class="text-red-500">{{ $activity->old_values[$key] ?? 'N/A' }}</span>
+                     &rarr;
+                     <span class="text-green-500">{{ $value }}</span>
+                </li>
+            @endforeach
+        </ul>
+    </div>
+@endforeach
 ```
-
-## Translations
-
-Easily translate events, model names, and attributes.
-
-### Publishing Translations
-
-```bash
-php artisan vendor:publish --tag=activity-presenter-translations
-```
-
-This will publish language files to `resources/lang/vendor/activity-presenter`.
-
-### Customizing Translations
-
-**Events**:
-
-```php
-// resources/lang/vendor/activity-presenter/en/logs.php
-'events' => [
-    'created' => 'Created',
-    'updated' => 'Updated',
-    'deleted' => 'Deleted',
-],
-```
-
-**Models**:
-
-```php
-'models' => [
-    'User' => 'User',
-    'Post' => 'Article',
-],
-```
-
-**Attributes**:
-
-```php
-'attributes' => [
-    'title' => 'Title',
-    'content' => 'Body text',
-    'is_published' => 'Published Status',
-],
-```
-
-> **Note**: The system automatically respects your `config('app.locale')`.
 
 ## Documentation
 
--   [Installation & Configuration](docs/installation.md)
--   [Logging](docs/logging.md)
--   [Usage Guide](docs/usage.md)
--   [Localization](docs/localization.md)
+-   [Installation & Configuration](docs/installation.md) - Deep dive into setup and config options.
+-   [Logging Guide](docs/logging.md) - Best practices for logging model events.
+-   [Usage Patterns](docs/usage.md) - Advanced usage in Controllers, Views, and APIs.
+-   [Localization](docs/localization.md) - How to translate every aspect of your logs.
 
 ## License
 
