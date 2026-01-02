@@ -67,7 +67,8 @@ public function index()
     // - Resolves relationships
     // - Hydrates the row with a `presentation` property
     // Note: Accepts both Eloquent Builder and Query Builder.
-    $groupedRows = ActivityPresenter::presentGrouped($query);
+    // Optional: Pass a second argument to control pagination (default 10).
+    $groupedRows = ActivityPresenter::presentGrouped($query, perPage: 15);
 
     return view('audit-log.grouped', [
         'rows' => $groupedRows

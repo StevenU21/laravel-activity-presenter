@@ -112,3 +112,24 @@ it('handles presentGrouped gracefully with no results', function () {
 
     expect($paginator->count())->toBe(0);
 });
+
+it('presents grouped activities with custom per page', function () {
+    // Create 15 items
+    for ($i = 1; $i <= 15; $i++) {
+        Activity::create(['event' => 'created', 'subject_type' => TestModel::class, 'subject_id' => $i, 'description' => "test $i"]);
+    }
+
+    $query = Activity::query()
+        ->select('subject_type', 'subject_id', DB::raw('MAX(id) as latest_id'))
+        ->groupBy('subject_type', 'subject_id');
+
+    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+
+    // Request 5 per page
+    $paginator = $presenter->presentGrouped($query, 5);
+
+    expect($paginator->perPage())->toBe(5);
+    expect($paginator->count())->toBe(5);
+    expect($paginator->total())->toBe(15);
+    expect($paginator->lastPage())->toBe(3);
+});

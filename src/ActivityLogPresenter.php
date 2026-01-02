@@ -89,10 +89,10 @@ class ActivityLogPresenter
      * @param \Illuminate\Database\Eloquent\Builder $query
      * @return \Illuminate\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection
      */
-    public function presentGrouped(Builder|QueryBuilder $query)
+    public function presentGrouped(Builder|QueryBuilder $query, int $perPage = 10)
     {
         // 1. Paginate the grouped results (lightweight, just subject_id/type/max_id)
-        $paginator = $query->paginate(20);
+        $paginator = $query->paginate($perPage);
 
         // 2. Extract the actual Activity IDs from the "latest" aggregate
         // Assuming the query selects MAX(id) as latest_id or similar
