@@ -133,3 +133,33 @@ it('presents grouped activities with custom per page', function () {
     expect($paginator->total())->toBe(15);
     expect($paginator->lastPage())->toBe(3);
 });
+
+it('presents grouped activities with advanced options', function () {
+    // Create activities
+    Activity::create(['event' => 'created', 'subject_type' => TestModel::class, 'subject_id' => 1, 'description' => 'test 1']);
+
+    $query = Activity::query()
+        ->select('subject_type', 'subject_id', DB::raw('MAX(id) as max_id_alias'))
+        ->groupBy('subject_type', 'subject_id');
+
+    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+
+    // Test with custom max_id column and loadRelations callback
+    $paginator = $presenter->presentGrouped(
+        query: $query,
+        latestIdColumn: 'max_id_alias',
+        loadRelations: function ($q) {
+            $q->where('id', '>', 0); // Dummy condition to verify callback is called
+        }
+    );
+
+    $item = $paginator->first();
+
+    // Verify encoded_subject_type hydration
+    expect($item->encoded_subject_type)->not->toBeNull();
+    // Base64 of TestModel::class
+    expect($item->encoded_subject_type)->toContain(str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(TestModel::class)));
+
+    // Verify presentation is attached
+    expect($item->presentation)->toBeInstanceOf(\Deifhelt\ActivityPresenter\Data\ActivityPresentationDTO::class);
+});

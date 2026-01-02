@@ -89,35 +89,39 @@ class ActivityLogPresenter
      * @param \Illuminate\Database\Eloquent\Builder $query
      * @return \Illuminate\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection
      */
-    public function presentGrouped(Builder|QueryBuilder $query, int $perPage = 10)
-    {
+    public function presentGrouped(
+        Builder|QueryBuilder $query,
+        int $perPage = 10,
+        string $latestIdColumn = 'latest_id',
+        ?callable $loadRelations = null
+    ) {
         // 1. Paginate the grouped results (lightweight, just subject_id/type/max_id)
         $paginator = $query->paginate($perPage);
 
         // 2. Extract the actual Activity IDs from the "latest" aggregate
-        // Assuming the query selects MAX(id) as latest_id or similar
-        // If not, we might need a convention. Let's assume the user selects 'max(id) as id' or just 'id'.
-        // Actually best practice is to require the user to pass a builder that selects the ID.
-
-        // Let's iterate the items. Each item is likely a generic object or partial Activity model
-        $activityIds = $paginator->getCollection()->map(fn($item) => $item->latest_id ?? $item->id)->filter()->toArray();
+        $activityIds = $paginator->getCollection()->map(fn($item) => $item->{$latestIdColumn} ?? $item->id)->filter()->toArray();
 
         if (empty($activityIds)) {
             return $paginator; // Return empty paginator
         }
 
         // 3. Fetch full Activity models
-        $activities = Activity::whereIn('id', $activityIds)
-            ->with(['causer', 'subject']) // Eager load basics
-            ->get()
-            ->keyBy('id');
+        $activityQuery = Activity::whereIn('id', $activityIds);
+
+        if ($loadRelations) {
+            $loadRelations($activityQuery);
+        } else {
+            $activityQuery->with(['causer', 'subject']); // Default eager load
+        }
+
+        $activities = $activityQuery->get()->keyBy('id');
 
         // 4. Resolve Presentation (Relation Resolver)
         $resolvedModels = $this->resolver->resolve($activities);
 
         // 5. Transform the Paginator Collection
-        $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels) {
-            $id = $groupRow->latest_id ?? $groupRow->id;
+        $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels, $latestIdColumn) {
+            $id = $groupRow->{$latestIdColumn} ?? $groupRow->id;
 
             if (!isset($activities[$id])) {
                 return $groupRow; // Should not happen
@@ -128,11 +132,11 @@ class ActivityLogPresenter
             // Present the activity
             $presentation = ActivityPresentationDTO::fromActivity($activity, $resolvedModels, $this->config);
 
-            // Hydrate/Attach presentation to the row (or return generic object)
-            // User suggestion: "hydrate($activities, into: 'activity')"
-            // Here we are inside the method, so we can just return a rich object.
-            // Let's attach to the generic row.
+            // Hydrate/Attach presentation to the row
             $groupRow->presentation = $presentation;
+
+            // Hydrate encoded subject type for UI links
+            $groupRow->encoded_subject_type = $this->encodeSubjectType($activity->subject_type ?? '');
 
             return $groupRow;
         });

@@ -61,14 +61,17 @@ public function index()
         ->latest('latest_id');
 
     // 2. Present Grouped
-    // Automatically:
-    // - Paginates the groups (lightweight query)
-    // - Fetches the full Activity model for the `latest_id`
-    // - Resolves relationships
-    // - Hydrates the row with a `presentation` property
     // Note: Accepts both Eloquent Builder and Query Builder.
-    // Optional: Pass a second argument to control pagination (default 10).
-    $groupedRows = ActivityPresenter::presentGrouped($query, perPage: 15);
+    // Optional arguments: perPage (default 10), latestIdColumn (default 'latest_id'), loadRelations (callback)
+    $groupedRows = ActivityPresenter::presentGrouped(
+        query: $query,
+        perPage: 15,
+        latestIdColumn: 'latest_id',
+        loadRelations: function ($query) {
+             // Advanced: Custom eager loading for specific domain logic (e.g. morph map)
+             $query->with(['subject.client']);
+        }
+    );
 
     return view('audit-log.grouped', [
         'rows' => $groupedRows
@@ -82,7 +85,9 @@ In your view:
 @foreach($rows as $row)
     <!-- Access the DTO via the presentation property -->
     <div>{{ $row->presentation->subject_name }}</div>
-    <div>{{ $row->presentation->diff }}</div>
+
+    <!-- Use the hydrated encoded_subject_type for links -->
+    <a href="{{ route('audit.index', ['type' => $row->encoded_subject_type]) }}">Filter by this type</a>
 @endforeach
 ```
 
