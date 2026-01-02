@@ -98,12 +98,13 @@ class ActivityLogPresenter
             $activityQuery->with(['causer', 'subject']);
         }
 
-        $activities = $activityQuery->get()->keyBy('id');
+        $activities = $activityQuery->get();
 
         if ($afterFetch) {
             $afterFetch($activities);
         }
 
+        $activities = $activities->keyBy('id');
         $resolvedModels = $this->resolver->resolve($activities);
         $paginator->getCollection()->transform(function ($groupRow) use ($activities, $resolvedModels, $latestIdColumn) {
             $id = $groupRow->{$latestIdColumn} ?? $groupRow->id;
