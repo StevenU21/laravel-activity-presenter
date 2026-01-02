@@ -17,6 +17,8 @@ class ActivityPresentationDTO
         public string $subject_name,
         public array $old_values,
         public array $new_values,
+        public array $old_values_raw, // Keys are original, Values are unresolved
+        public array $new_values_raw, // Keys are original, Values are unresolved
         public array $raw_properties,
     ) {
     }
@@ -29,6 +31,8 @@ class ActivityPresentationDTO
         $userName = self::resolveUserName($activity, $labelAttributes);
         $subjectName = self::resolveSubjectName($activity, $labelAttributes, $translator);
 
+        $properties = $activity->properties ?? collect([]);
+
         return new self(
             id: $activity->id,
             date: $activity->created_at->format('Y-m-d H:i:s'),
@@ -37,9 +41,11 @@ class ActivityPresentationDTO
             event: $translator->translateEvent($activity->event),
             subject_type: $translator->translateModel($activity->subject_type ?? ''),
             subject_name: $subjectName,
-            old_values: self::resolveValues($activity->properties['old'] ?? [], $config, $resolvedModels, $translator),
-            new_values: self::resolveValues($activity->properties['attributes'] ?? [], $config, $resolvedModels, $translator),
-            raw_properties: $activity->properties->toArray()
+            old_values: self::resolveValues($properties['old'] ?? [], $config, $resolvedModels, $translator),
+            new_values: self::resolveValues($properties['attributes'] ?? [], $config, $resolvedModels, $translator),
+            old_values_raw: $properties['old'] ?? [],
+            new_values_raw: $properties['attributes'] ?? [],
+            raw_properties: $properties->toArray()
         );
     }
 
@@ -60,10 +66,24 @@ class ActivityPresentationDTO
     {
         if ($activity->subject) {
             $subjectClass = get_class($activity->subject);
-            $subjectLabelAttr = $labelAttributes[$subjectClass] ?? 'title';
 
-            return $activity->subject->{$subjectLabelAttr}
-                ?? $translator->translateModel($subjectClass) . " #{$activity->subject_id}";
+            // Smart Fallback Order
+            $attributesToCheck = array_filter([
+                $labelAttributes[$subjectClass] ?? null, // Configured
+                'audit_display',
+                'name',
+                'title',
+                'code',
+                'slug',
+            ]);
+
+            foreach ($attributesToCheck as $attr) {
+                if ($activity->subject->getAttribute($attr)) { // Use getAttribute to support Accessors
+                    return $activity->subject->getAttribute($attr);
+                }
+            }
+
+            return $translator->translateModel($subjectClass) . " #{$activity->subject_id}";
         }
 
         if ($activity->subject_type) {
