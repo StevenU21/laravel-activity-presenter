@@ -19,11 +19,11 @@ When displaying activity logs, you often face these issues:
 
 ## Key Features
 
-- **🚀 Smart Resolution**: Automatically resolves related models (User, Subject) in a single optimized query to prevent N+1 issues.
-- **💎 Object-Oriented**: Provides rich objects (`LogEntry`, `AttributeChange`) instead of flat strings, giving you full control in your View.
-- **🔌 Config-Driven**: Define how specific attributes (like `category_id`) map to models in a simple config file.
-- **🌍 Auto-Localization**: Built-in support for translating events (`created` -> `Creado`), model names (`User` -> `Usuario`), and attributes.
-- **🛡️ Agnostic & Flexible**: Does not force date formats or string styles. You get the raw `Carbon` objects and Models to format however you like.
+- **Smart Resolution**: Automatically resolves related models (User, Subject) in a single optimized query to prevent N+1 issues.
+- **Object-Oriented**: Provides rich objects (`LogEntry`, `AttributeChange`) instead of flat strings, giving you full control in your View.
+- **Config-Driven**: Define how specific attributes (like `category_id`) map to models in a simple config file.
+- **Auto-Localization**: Built-in support for translating events (`created` -> `Creado`), model names (`User` -> `Usuario`), and attributes.
+- **Agnostic & Flexible**: Does not force date formats or string styles. You get the raw `Carbon` objects and Models to format however you like.
 
 ## Installation
 
