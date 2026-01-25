@@ -39,7 +39,14 @@ it('can resolve activity with related model', function () {
 
     $dto = ActivityPresenter::present($activity);
 
-    expect($dto->old_values['User id'])->toBe('John Doe');
-    expect($dto->new_values['User id'])->toBe('John Doe');
-    expect($dto->old_values['Foo'])->toBe('bar');
+    $userIdChange = $dto->changes->firstWhere('key', 'user_id');
+    expect($userIdChange)->not->toBeNull();
+    // In strict mode raw values are preserved. The view handles the display resolution.
+    // However, if we want to verify resolution HAPPENED, check relatedModel.
+    expect($userIdChange->relatedModel)->toBeInstanceOf(FeatureTestUser::class);
+    expect($userIdChange->relatedModel->name)->toBe('John Doe');
+
+    $fooChange = $dto->changes->firstWhere('key', 'foo');
+    expect($fooChange->old)->toBe('bar');
+    expect($fooChange->new)->toBe('baz');
 });

@@ -3,7 +3,9 @@
 namespace Deifhelt\ActivityPresenter;
 
 use Deifhelt\ActivityPresenter\Data\ActivityPresentationDTO;
+use Deifhelt\ActivityPresenter\Data\AttributeChange;
 use Deifhelt\ActivityPresenter\Services\RelationResolver;
+use Deifhelt\ActivityPresenter\Services\TranslationService;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -13,11 +15,16 @@ use Illuminate\Database\Eloquent\Builder;
 class ActivityLogPresenter
 {
     protected RelationResolver $resolver;
+    protected TranslationService $translator;
     protected array $config;
 
-    public function __construct(RelationResolver $resolver, array $config)
-    {
+    public function __construct(
+        RelationResolver $resolver,
+        TranslationService $translator,
+        array $config
+    ) {
         $this->resolver = $resolver;
+        $this->translator = $translator;
         $this->config = $config;
     }
 
@@ -25,7 +32,7 @@ class ActivityLogPresenter
     {
         $resolvedModels = $this->resolver->resolve(new Collection([$activity]));
 
-        return ActivityPresentationDTO::fromActivity($activity, $resolvedModels, $this->config);
+        return $this->buildExhaustiveDto($activity, $resolvedModels);
     }
 
     public function presentCollection(Collection|EloquentCollection $activities): Collection
@@ -33,8 +40,65 @@ class ActivityLogPresenter
         $resolvedModels = $this->resolver->resolve($activities);
 
         return $activities->map(function ($activity) use ($resolvedModels) {
-            return ActivityPresentationDTO::fromActivity($activity, $resolvedModels, $this->config);
+            return $this->buildExhaustiveDto($activity, $resolvedModels);
         });
+    }
+
+    protected function buildExhaustiveDto(Activity $activity, array $resolvedModels): ActivityPresentationDTO
+    {
+        $properties = $activity->properties ?? collect([]);
+        $old = $properties['old'] ?? [];
+        $new = $properties['attributes'] ?? [];
+
+        // Merge keys from both old and new to support deletions/creations equally
+        $allKeys = array_unique(array_merge(array_keys($old), array_keys($new)));
+
+        $changes = collect();
+        $hidden = $this->config['hidden_attributes'] ?? [];
+        $resolvers = $this->config['resolvers'] ?? [];
+
+        foreach ($allKeys as $key) {
+            if (in_array($key, $hidden)) {
+                continue;
+            }
+
+            $oldValue = $old[$key] ?? null;
+            $newValue = $new[$key] ?? null;
+
+            // Resolve related model if applicable
+            $relatedModel = null;
+            if (isset($resolvers[$key])) {
+                $modelClass = $resolvers[$key];
+                // Check both old and new values for resolution
+                // Prioritize new value, fallback to old if we want to show what it WAS (e.g. project #123)
+                // Actually, often we want the model corresponding to the ID.
+                // If it changed from 1 to 2, which model do we pass?
+                // Ideally we might want both, but AttributeChange has one 'relatedModel'.
+                // If the user wants specific 'oldModel' and 'newModel', we might need to expand AttributeChange.
+                // For now, let's resolve the 'Current' relevant model (usually the new one, or old if deleted)
+
+                $idToResolve = $newValue ?: $oldValue;
+                if ($idToResolve && isset($resolvedModels[$modelClass][$idToResolve])) {
+                    $relatedModel = $resolvedModels[$modelClass][$idToResolve];
+                }
+            }
+
+            $changes->push(new AttributeChange(
+                key: $key,
+                old: $oldValue,
+            new: $newValue,
+                relatedModel: $relatedModel
+            ));
+        }
+
+        return new ActivityPresentationDTO(
+            activity: $activity,
+            causer: $activity->causer,
+            subject: $activity->subject,
+            changes: $changes,
+            translator: $this->translator,
+            config: $this->config
+        );
     }
 
     /**
@@ -133,7 +197,9 @@ class ActivityLogPresenter
             }
 
             $activity = $activities[$id];
-            $presentation = ActivityPresentationDTO::fromActivity($activity, $resolvedModels, $this->config);
+
+            // Use the new build method
+            $presentation = $this->buildExhaustiveDto($activity, $resolvedModels);
 
             $groupRow->presentation = $presentation;
             $groupRow->encoded_subject_type = $this->encodeSubjectType($activity->subject_type ?? '');

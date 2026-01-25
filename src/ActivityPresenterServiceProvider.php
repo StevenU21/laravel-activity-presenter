@@ -25,6 +25,7 @@ class ActivityPresenterServiceProvider extends PackageServiceProvider
         $this->app->singleton(ActivityLogPresenter::class, function ($app) {
             return new ActivityLogPresenter(
                 $app->make(RelationResolver::class),
+                $app->make(\Deifhelt\ActivityPresenter\Services\TranslationService::class),
                 config('activity-presenter', [])
             );
         });

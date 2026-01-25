@@ -1,6 +1,7 @@
 <?php
 
 use Deifhelt\ActivityPresenter\Services\RelationResolver;
+use Deifhelt\ActivityPresenter\Services\TranslationService;
 use Deifhelt\ActivityPresenter\ActivityLogPresenter;
 use Spatie\Activitylog\Models\Activity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -24,8 +25,17 @@ beforeEach(function () {
     });
 });
 
+function createPresenter(array $config = [])
+{
+    return new ActivityLogPresenter(
+        new RelationResolver($config),
+        new TranslationService(),
+        $config
+    );
+}
+
 it('encodes subject type using base64 by default', function () {
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+    $presenter = createPresenter([]);
 
     $class = 'App\Models\Test';
     $encoded = $presenter->encodeSubjectType($class);
@@ -41,13 +51,13 @@ it('encodes subject type using configured alias', function () {
             'App\Models\Invoice' => 'invoice',
         ]
     ];
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), $config);
+    $presenter = createPresenter($config);
 
     expect($presenter->encodeSubjectType('App\Models\Invoice'))->toBe('invoice');
 });
 
 it('decodes subject type using base64', function () {
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+    $presenter = createPresenter([]);
     $class = 'App\Models\Test';
     $encoded = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($class));
 
@@ -60,7 +70,7 @@ it('decodes subject type using configured alias', function () {
             'App\Models\Invoice' => 'invoice',
         ]
     ];
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), $config);
+    $presenter = createPresenter($config);
 
     expect($presenter->decodeSubjectType('invoice'))->toBe('App\Models\Invoice');
 });
@@ -78,7 +88,7 @@ it('presents grouped activities correctly', function () {
         ->groupBy('subject_type', 'subject_id')
         ->orderBy('latest_id', 'desc');
 
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+    $presenter = createPresenter([]);
 
     $paginator = $presenter->presentGrouped($query);
 
@@ -86,18 +96,12 @@ it('presents grouped activities correctly', function () {
 
     $items = $paginator->getCollection();
 
-    // Check first item (latest is ID 2 from test model 1? No, ID 2 is actually the second created activity)
-    // Insertion order: ID 1, ID 2, ID 3.
-    // Group 1: subject_id=1. Latest ID=2.
-    // Group 2: subject_id=2. Latest ID=3.
-    // Ordered by latest_id desc -> Group 2 (ID 3) comes first.
-
     $first = $items->first();
     expect($first->presentation)->toBeInstanceOf(\Deifhelt\ActivityPresenter\Data\ActivityPresentationDTO::class);
-    expect($first->presentation->event)->toBe('Created'); // Default translation for 'created'
+    expect($first->presentation->getEventLabel())->toBe('Created'); // Default translation for 'created'
 
     $second = $items->last();
-    expect($second->presentation->event)->toBe('Updated');
+    expect($second->presentation->getEventLabel())->toBe('Updated');
 });
 
 it('handles presentGrouped gracefully with no results', function () {
@@ -105,7 +109,7 @@ it('handles presentGrouped gracefully with no results', function () {
         ->select('subject_type', 'subject_id', DB::raw('MAX(id) as latest_id'))
         ->groupBy('subject_type', 'subject_id');
 
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+    $presenter = createPresenter([]);
     $paginator = $presenter->presentGrouped($query);
 
     expect($paginator->count())->toBe(0);
@@ -121,7 +125,7 @@ it('presents grouped activities with custom per page', function () {
         ->select('subject_type', 'subject_id', DB::raw('MAX(id) as latest_id'))
         ->groupBy('subject_type', 'subject_id');
 
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+    $presenter = createPresenter([]);
 
     // Request 5 per page
     $paginator = $presenter->presentGrouped($query, 5);
@@ -140,7 +144,7 @@ it('presents grouped activities with advanced options', function () {
         ->select('subject_type', 'subject_id', DB::raw('MAX(id) as max_id_alias'))
         ->groupBy('subject_type', 'subject_id');
 
-    $presenter = new ActivityLogPresenter(new RelationResolver([]), []);
+    $presenter = createPresenter([]);
 
     // Test with custom max_id column and loadRelations callback
     $paginator = $presenter->presentGrouped(
@@ -160,7 +164,7 @@ it('presents grouped activities with advanced options', function () {
         mapGroupRow: function ($row, $activity, $presentation) {
             // Return a simple custom object (simulating a ViewModel)
             return (object) [
-                'custom_title' => $presentation->subject_name . ' (' . $presentation->event . ')',
+                'custom_title' => $presentation->getSubjectLabel() . ' (' . $presentation->getEventLabel() . ')',
                 'original_id' => $activity->id,
                 'type_link' => $row->encoded_subject_type,
             ];
