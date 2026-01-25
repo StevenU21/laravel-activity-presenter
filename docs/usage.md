@@ -78,10 +78,10 @@ public function index()
             // 3. Transform into your Project's DTO (Best Practice)
             // This decouples the library from your View/Routing logic.
             return new \App\DTOs\AuditIndexRow(
-                date: $presentation->date,
-                subject: $presentation->subject_name,
-                event: $presentation->event,
-                user: $presentation->user_name,
+                date: $presentation->activity->created_at,
+                subject: $presentation->getSubjectLabel(),
+                event: $presentation->getEventLabel(),
+                user: $presentation->getCauserLabel(),
                 filterUrl: route('audit.index', ['type' => $row->encoded_subject_type]),
                 detailsUrl: route('audit.show', $activity->id)
             );
@@ -147,37 +147,54 @@ public function index(Request $request) {
 
 ## 3. Viewing Data (The DTO)
 
-The presenter returns `ActivityPresentationDTO` objects.
+The presenter returns `ActivityPresentationDTO` objects, which serve as a rich wrapper around your specific log.
 
-### System Properties
+### Core Properties
 
-| Property    | Type     | Description               |
-| :---------- | :------- | :------------------------ |
-| **`id`**    | `int`    | ID of the log entry       |
-| **`date`**  | `string` | Full date string          |
-| **`diff`**  | `string` | Relative time             |
-| **`event`** | `string` | **Translated** event name |
+| Property       | Type         | Description                                                                                                                          |
+| :------------- | :----------- | :----------------------------------------------------------------------------------------------------------------------------------- |
+| **`activity`** | `Activity`   | The original Spatie Activitylog model. Access properties like `$log->activity->created_at` or `$log->activity->properties` directly. |
+| **`causer`**   | `?Model`     | The resolved User model who performed the action. Can be null (System).                                                              |
+| **`subject`**  | `?Model`     | The resolved Subject model. Can be null if deleted.                                                                                  |
+| **`changes`**  | `Collection` | A collection of `AttributeChange` objects representing what changed.                                                                 |
 
-### Resolved Relations
+### Helper Methods
 
-| Property           | Type     | Description                                                        |
-| :----------------- | :------- | :----------------------------------------------------------------- |
-| **`user_name`**    | `string` | Name of the person who acted.                                      |
-| **`subject_name`** | `string` | Name of the model (Auto-detects `audit_display`, `name`, `title`). |
-| **`subject_type`** | `string` | **Translated** model class name.                                   |
+| Method                  | Returns  | Description                                                                                           |
+| :---------------------- | :------- | :---------------------------------------------------------------------------------------------------- |
+| **`getCauserLabel()`**  | `string` | Returns the name of the user (configurable via `label_attribute`). Defaults to "System" or "Unknown". |
+| **`getSubjectLabel()`** | `string` | Returns the display name of the subject. Checks `audit_display`, `name`, `title`, etc. gracefully.    |
+| **`getEventLabel()`**   | `string` | Returns the **translated** event name (e.g., "Created" -> "Creado").                                  |
 
-### Changes (Translated vs Raw)
+### Working with Changes (`AttributeChange`)
 
-| Property             | Description                                                                   |
-| :------------------- | :---------------------------------------------------------------------------- |
-| **`old_values`**     | Keys are **translated** (e.g. "Name"). Values are **resolved** (e.g. "John"). |
-| **`new_values`**     | Keys are **translated**. Values are **resolved**.                             |
-| **`old_values_raw`** | **Original** DB keys (e.g. "first_name"). Original DB values (e.g. "John").   |
-| **`new_values_raw`** | **Original** DB keys. Original DB values.                                     |
+The `changes` collection contains strict objects representing each field modification.
 
-Use `_raw` properties when you need to perform logic in your view (e.g. `if ($key === 'status')`) or want to customize the display manually.
+| Property           | Type     | Description                                                                                    |
+| :----------------- | :------- | :--------------------------------------------------------------------------------------------- |
+| **`key`**          | `string` | The attribute name (e.g., "status_id").                                                        |
+| **`old`**          | `mixed`  | The original old value (e.g., `1`).                                                            |
+| **`new`**          | `mixed`  | The original new value (e.g., `2`).                                                            |
+| **`relatedModel`** | `?Model` | If configured in `resolvers`, this holds the related model (e.g., The Status model with ID 2). |
 
----
+#### Example: Displaying a Status Change
+
+```blade
+@foreach($log->changes as $change)
+    <li>
+        <strong>{{ $change->key }}</strong>:
+
+        @if($change->relatedModel)
+             <!-- Optimized: We have the model instance ready to use! -->
+             <a href="{{ route('statuses.show', $change->relatedModel) }}">
+                 {{ $change->relatedModel->name }}
+             </a>
+        @else
+             {{ $change->old }} -> {{ $change->new }}
+        @endif
+    </li>
+@endforeach
+```
 
 ## 4. Advanced: The N+1 Problem Solved
 

@@ -80,5 +80,5 @@ app()->setLocale('es');
 
 // Presenter will now output Spanish
 $dto = ActivityPresenter::present($activity);
-echo $dto->event; // "Creado"
+echo $dto->getEventLabel(); // "Creado"
 ```

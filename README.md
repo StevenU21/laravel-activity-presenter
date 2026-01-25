@@ -19,11 +19,11 @@ When displaying activity logs, you often face these issues:
 
 ## Key Features
 
--   **🚀 Smart Resolution**: Automatically resolves related models (User, Subject) in a single optimized query to prevent N+1 issues.
--   **💎 Unified DTO**: Transforms raw log data into a consistent `ActivityPresentationDTO` class for easy use in Views and APIs.
--   **🔌 Config-Driven**: Define how specific attributes (like `category_id`) map to models in a simple config file.
--   **🌍 Auto-Localization**: Built-in support for translating events (`created` -> `Creado`), model names (`User` -> `Usuario`), and attributes.
--   **🛡️ Graceful Fallbacks**: If a related model is permanently deleted, it gracefully falls back to historical data (e.g., "Project #123").
+- **🚀 Smart Resolution**: Automatically resolves related models (User, Subject) in a single optimized query to prevent N+1 issues.
+- **💎 Object-Oriented**: Provides rich objects (`LogEntry`, `AttributeChange`) instead of flat strings, giving you full control in your View.
+- **🔌 Config-Driven**: Define how specific attributes (like `category_id`) map to models in a simple config file.
+- **🌍 Auto-Localization**: Built-in support for translating events (`created` -> `Creado`), model names (`User` -> `Usuario`), and attributes.
+- **🛡️ Agnostic & Flexible**: Does not force date formats or string styles. You get the raw `Carbon` objects and Models to format however you like.
 
 ## Installation
 
@@ -64,25 +64,43 @@ public function index()
 ### 2. In your Blade View
 
 ```blade
-@foreach($activities as $activity)
+@foreach($activities as $log)
     <div class="activity-item">
-        <span class="date">{{ $activity->diff }}</span>
+        <!-- Full Control over Date Format -->
+        <span class="date">{{ $log->activity->created_at->diffForHumans() }}</span>
 
         <!-- "John Doe created Project Alpha" -->
         <p>
-            <strong>{{ $activity->user_name }}</strong>
-            {{ $activity->event }}
-            <strong>{{ $activity->subject_name }}</strong>
+            @if($log->causer)
+                <a href="{{ route('users.show', $log->causer) }}">
+                    <strong>{{ $log->getCauserLabel() }}</strong>
+                </a>
+            @else
+                System
+            @endif
+
+            {{ $log->getEventLabel() }}
+
+            <strong>{{ $log->getSubjectLabel() }}</strong>
         </p>
 
         <!-- Show changes: "Status: Pending -> Active" -->
         <ul>
-            @foreach($activity->new_values as $key => $value)
+            @foreach($log->changes as $change)
                 <li>
-                     {{ $key }}:
-                     <span class="text-red-500">{{ $activity->old_values[$key] ?? 'N/A' }}</span>
+                     {{ $change->key }}:
+
+                     <span class="text-red-500">{{ $change->old }}</span>
                      &rarr;
-                     <span class="text-green-500">{{ $value }}</span>
+
+                     <!-- If it's a resolved model (e.g. status_id -> Status Model), link to it! -->
+                     @if($change->relatedModel)
+                        <a href="{{ route('statuses.show', $change->relatedModel) }}" class="text-green-500">
+                            {{ $change->relatedModel->name }}
+                        </a>
+                     @else
+                        <span class="text-green-500">{{ $change->new }}</span>
+                     @endif
                 </li>
             @endforeach
         </ul>
@@ -92,10 +110,10 @@ public function index()
 
 ## Documentation
 
--   [Installation & Configuration](docs/installation.md) - Deep dive into setup and config options.
--   [Logging Guide](docs/logging.md) - Best practices for logging model events.
--   [Usage Patterns](docs/usage.md) - Advanced usage in Controllers, Views, and APIs.
--   [Localization](docs/localization.md) - How to translate every aspect of your logs.
+- [Installation & Configuration](docs/installation.md) - Deep dive into setup and config options.
+- [Logging Guide](docs/logging.md) - Best practices for logging model events.
+- [Usage Patterns](docs/usage.md) - Advanced usage in Controllers, Views, and APIs.
+- [Localization](docs/localization.md) - How to translate every aspect of your logs.
 
 ## License
 
